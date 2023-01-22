@@ -67,7 +67,7 @@ void initState() {
 
 /* Appends a line to *lines in state. */
 void appendLine(char *line, size_t len) {
-    S.lines = realloc(S.lines, S.textSize += len + 1);
+    S.lines = realloc(S.lines, sizeof(TextLine) * (S.numLines + 1));
 
     int lineNum = S.numLines;
     S.lines[lineNum].size = len;
@@ -102,8 +102,8 @@ void intToStr(int n, char *str) {
     int digit = 0;
     for(i = n; i > 0; i /= 10, digit++);
     for(i = n; i > 0; i /= 10) {
-        str[digit] = i % 10 + '0';
         digit--;
+        str[digit] = i % 10 + '0';
     }
 }
 
@@ -118,25 +118,25 @@ void displayLines() {
     char num[S.leftPad];
     char pad[S.leftPad + 1];
     for(i = 0; i < S.screen.rows; i++) {
-        fprintf(ef, "iteration");
         if(i >= S.topLine && screenUsed <= S.screen.rows) {
-            fprintf(ef, " if");
             /* Create a string leftPad chars long with the beginning filled by the line number and the remainder filled by blank space. */
             memset(pad, ' ', S.leftPad + 1);
             intToStr(i, num);
             strncpy(pad, num, digitCount(i));
 
+
             while(charsPrinted <= S.lines[i].size) {
-                mvaddstr(screenUsed, 0, pad);
+                mvaddnstr(screenUsed, 0, pad, sizeof(pad));
                 n = S.screen.cols - sizeof(pad);
-                mvaddnstr(screenUsed, sizeof(pad), &(S.lines[i].buf[charsPrinted]), n);
+                if(S.lines[i].size != 0){
+                    mvaddnstr(screenUsed, sizeof(pad), &(S.lines[i].buf[charsPrinted]), n);
+                }
                 charsPrinted += n;
                 screenUsed++;
                 memset(pad, ' ', S.leftPad + 1);
             }   
             charsPrinted = 0;
         }
-        fprintf(ef, "\n");
     }
 }
 
