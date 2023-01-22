@@ -34,7 +34,10 @@ struct State {
     FILE *fd;
 };
 
+/* VARS */
 struct State S;
+
+/* MISC */
 
 /* Give error message and exit. */
 void err(char *str) {
@@ -54,11 +57,27 @@ int digitCount(int n) {
     return count;
 }
 
+/* Converts int to base 10 string. */
+void intToStr(int n, char *str) {
+    if(n == 0) {
+        str[0] = '0';
+    }
+    int i;
+    int digit = 0;
+    for(i = n; i > 0; i /= 10, digit++);
+    for(i = n; i > 0; i /= 10) {
+        digit--;
+        str[digit] = i % 10 + '0';
+    }
+}
+
+/* CONFIG */
+
 /* Initializes the current state of the text editor.*/
 void initState() {
     S.cursor.x = 0;
     S.cursor.y = 0;
-    S.screen.rows = LINES - 3;
+    S.screen.rows = LINES - 1;
     S.screen.cols = COLS - 5;
     S.topLine = 0;
     S.numLines = 0;
@@ -94,25 +113,13 @@ void openFile(char *filename) {
     S.leftPad = digitCount(S.numLines) + 1;
 }
 
-/* Converts int to base 10 string. */
-void intToStr(int n, char *str) {
-    if(n == 0) {
-        str[0] = '0';
-    }
-    int i;
-    int digit = 0;
-    for(i = n; i > 0; i /= 10, digit++);
-    for(i = n; i > 0; i /= 10) {
-        digit--;
-        str[digit] = i % 10 + '0';
-    }
-}
-
 /* Scroll the screen if the cursor goes offscreen. */
 void scrollScreen() {
     if(S.cursor.y < S.topLine) S.topLine = S.cursor.y;
     if(S.cursor.y >= S.topLine + S.screen.rows) S.topLine = S.cursor.y - S.screen.rows + 1;
 }
+
+/* DISPLAY */
 
 /* Display the appropriate lines on the screen. */
 void displayLines() {
@@ -147,10 +154,34 @@ void displayLines() {
     }
 }
 
-/* Display the current file based on the State struct. */
-void display() {
-    displayLines();
+/* Display a bottom bar with the file name and cursor position. */
+void displayBar(char *name) {
+    int i;
+    for(i = 0; i < COLS; i++)
+        mvaddch(LINES - 2, i, ACS_HLINE);
+    
+    
+    mvaddstr(LINES - 1, 10, name);
+    
+    int n = COLS - 25;
+    mvaddch(LINES - 1, n, '(');
+    char str[10];
+    memset(str, ' ', 10);
+    intToStr(S.cursor.y, str);
+    addnstr(str, digitCount(S.cursor.y));
+    addch(',');
+    intToStr(S.cursor.x, str);
+    addnstr(str, digitCount(S.cursor.x));
+    addch(')');
 }
+
+/* Display the current file based on the State struct. */
+void display(char *name) {
+    displayLines();
+    displayBar(name);
+}
+
+/* KEY PROCESSOR */
 
 /* Gets the keypress and processes it. */
 int processKeypress(int c) {
@@ -191,7 +222,7 @@ int main(int argc, char **argv) {
 
     while(1) {
         scrollScreen();
-        display();
+        display(argv[argc - 1]);
         move(S.cursor.y, S.cursor.x + S.leftPad);
         refresh();
         int c = getch();
