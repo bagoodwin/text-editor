@@ -31,6 +31,7 @@ struct State {
     size_t textSize;
     TextLine *lines;
     int leftPad;
+    FILE *fd;
 };
 
 struct State S;
@@ -79,13 +80,13 @@ void appendLine(char *line, size_t len) {
 
 /* Loads information from the file into state. */
 void openFile(char *filename) {
-    FILE *fd = fopen(filename, "r");
-    if(!fd) err("Failure to open file.");
+    S.fd = fopen(filename, "r");
+    if(!S.fd) err("Failure to open file.");
     char *line = NULL;
     size_t len = 0;
     ssize_t read;
 
-    while((read = getline(&line, &len, fd)) != -1) {
+    while((read = getline(&line, &len, S.fd)) != -1) {
         while(read > 0 && (line[read - 1] == '\n' || line[read - 1] == '\r')) read--;
         appendLine(line, read);
     }
@@ -109,8 +110,6 @@ void intToStr(int n, char *str) {
 
 /* Display the appropriate lines on the screen. */
 void displayLines() {
-    FILE *ef = fopen("error.txt", "w");
-
     int i;
     int n;
     int screenUsed = 0;
@@ -118,7 +117,7 @@ void displayLines() {
     char num[S.leftPad];
     char pad[S.leftPad + 1];
     for(i = 0; i < S.screen.rows; i++) {
-        if(i >= S.topLine && screenUsed <= S.screen.rows) {
+        if(i >= S.topLine && screenUsed <= S.screen.rows && i <= S.numLines) {
             /* Create a string leftPad chars long with the beginning filled by the line number and the remainder filled by blank space. */
             memset(pad, ' ', S.leftPad + 1);
             intToStr(i, num);
@@ -126,10 +125,12 @@ void displayLines() {
 
 
             while(charsPrinted <= S.lines[i].size) {
-                mvaddnstr(screenUsed, 0, pad, sizeof(pad));
+                attron(A_REVERSE);
+                mvaddnstr(screenUsed, 0, pad, sizeof(pad) - 2);
+                attroff(A_REVERSE);
                 n = S.screen.cols - sizeof(pad);
                 if(S.lines[i].size != 0){
-                    mvaddnstr(screenUsed, sizeof(pad), &(S.lines[i].buf[charsPrinted]), n);
+                    mvaddnstr(screenUsed, sizeof(pad) - 1, &(S.lines[i].buf[charsPrinted]), n);
                 }
                 charsPrinted += n;
                 screenUsed++;
@@ -169,14 +170,17 @@ int main(int argc, char **argv) {
 
     initState();
     openFile(argv[argc - 1]);
+    S.cursor.x = S.leftPad;
 
     while(1) {
         display();
+        move(S.cursor.y, S.cursor.x);
         refresh();
         int c = getch();
         if(!processKeypress(c)) break;
     }
 
+    fclose(S.fd);
     endwin();
 
     return EXIT_SUCCESS;
