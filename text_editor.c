@@ -58,8 +58,8 @@ int digitCount(int n) {
 void initState() {
     S.cursor.x = 0;
     S.cursor.y = 0;
-    S.screen.rows = LINES - 1;
-    S.screen.cols = COLS - 1;
+    S.screen.rows = LINES - 3;
+    S.screen.cols = COLS - 5;
     S.topLine = 0;
     S.numLines = 0;
     S.textSize = 0;
@@ -108,6 +108,12 @@ void intToStr(int n, char *str) {
     }
 }
 
+/* Scroll the screen if the cursor goes offscreen. */
+void scrollScreen() {
+    if(S.cursor.y < S.topLine) S.topLine = S.cursor.y;
+    if(S.cursor.y >= S.topLine + S.screen.rows) S.topLine = S.cursor.y - S.screen.rows + 1;
+}
+
 /* Display the appropriate lines on the screen. */
 void displayLines() {
     int i;
@@ -149,6 +155,18 @@ void display() {
 /* Gets the keypress and processes it. */
 int processKeypress(int c) {
     switch(c) {
+        case KEY_LEFT:
+            if(S.cursor.x > 0) S.cursor.x--;
+            break;
+        case KEY_RIGHT:
+            if(S.cursor.x < S.screen.cols) S.cursor.x++;
+            break;
+        case KEY_UP:
+            if(S.cursor.y > 0) S.cursor.y--;
+            break;
+        case KEY_DOWN:
+            if(S.cursor.y < S.screen.rows) S.cursor.y++;
+            break;
         case CTRL_KEY('q'):
         /* Exit program. */
             return 0;
@@ -170,11 +188,11 @@ int main(int argc, char **argv) {
 
     initState();
     openFile(argv[argc - 1]);
-    S.cursor.x = S.leftPad;
 
     while(1) {
+        scrollScreen();
         display();
-        move(S.cursor.y, S.cursor.x);
+        move(S.cursor.y, S.cursor.x + S.leftPad);
         refresh();
         int c = getch();
         if(!processKeypress(c)) break;
