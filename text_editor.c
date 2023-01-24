@@ -4,6 +4,7 @@
 #include <errno.h>
 #include <string.h>
 #include <sys/types.h>
+#include <setjmp.h>
 #include <ncurses.h>
 
 #define CTRL_KEY(x) ((x) & 0x1f)
@@ -27,27 +28,38 @@ struct State {
     Data data;
     int topLine;
     int leftWidth;
+    FILE *fd;
     char *fileName;
 };
 
 /* VARS */
-//struct State S;
 
 /* MISC */
 
+/* Frees blocks allocated in data. */
+void freeData(Data *data) {
+    int i;
+    for(i = 0; i < data->numLines; i++) {
+        free(data->lines[i].buf);
+    }
+    free(data->lines);
+}
+
 /* Give error message and exit. */
-void err(char *str) {
+void errorExit(Data *data, FILE *fd, char *str) {
     perror(str);
-    // TODO: free data
+    fclose(fd);
     endwin();
+    freeData(data);
     exit(EXIT_FAILURE);
 }
 
 /* Exit normally. */
-void normalExit() {
-    // TODO: free data
+void normalExit(Data *data, FILE *fd) {
+    fclose(fd);
     endwin();
-    exit(EXIT_SUCCESS);
+    freeData(data);
+    exit(EXIT_SUCCESS);    
 }
 
 /* Return the number of digits in the base 10 integer.*/
@@ -212,7 +224,7 @@ int processKeypress(struct State *S, int c) {
     switch(c) {
         case KEY_LEFT:
             if(S->cursor.x > 0) S->cursor.x--;
-            else {
+            else if(S->cursor.y > 0) {
                 // Wrap to end of previous line.
                 S->cursor.y--;
                 S->cursor.x = S->data.lines[S->cursor.y].size;
@@ -220,7 +232,7 @@ int processKeypress(struct State *S, int c) {
             break;
         case KEY_RIGHT:
             if(S->cursor.x < S->data.lines[S->cursor.y].size) S->cursor.x++;
-            else {
+            else if(S->cursor.y < S->data.numLines) {
                 // Wrap to start of next line.
                 S->cursor.y++;
                 S->cursor.x = 0;
@@ -242,7 +254,7 @@ int processKeypress(struct State *S, int c) {
             break;
         case CTRL_KEY('q'):
         /* Exit program. */
-            normalExit();
+            normalExit(&S->data, S->fd);
             break;
         default:
             addch(c);
@@ -263,8 +275,8 @@ int main(int argc, char **argv) {
 
     initState(&S);
     S.fileName = argv[argc - 1];
-    FILE *fd = fopen(S.fileName, "r");
-    readFile(fd, &S.data);
+    S.fd = fopen(S.fileName, "r");
+    readFile(S.fd, &S.data);
 
     while(1) {
         scrollScreen(&S.cursor, &S.topLine); // TODO: integrate into display
@@ -273,9 +285,4 @@ int main(int argc, char **argv) {
         int c = getch();
         if(!processKeypress(&S, c)) break;
     }
-
-    fclose(fd);
-    endwin();
-
-    return EXIT_SUCCESS;
 }
