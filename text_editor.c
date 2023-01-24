@@ -8,9 +8,13 @@
 #include <ncurses.h>
 
 #define CTRL_KEY(x) ((x) & 0x1f)
+#define TAB_WIDTH 4
+
 typedef struct {
     int size;
     char *buf;
+    int dsize;
+    char *dbuf;
 } TextLine;
 
 typedef struct {
@@ -41,6 +45,7 @@ void freeData(Data *data) {
     int i;
     for(i = 0; i < data->numLines; i++) {
         free(data->lines[i].buf);
+        free(fata->lines[i].dbuf);
     }
     free(data->lines);
 }
@@ -97,6 +102,36 @@ void initState(struct State *S) {
     S->topLine = 0;
 }
 
+/* Creates a display line from its corresponding logical line. */
+void createDisplayLine(TextLine *line) {
+    // Get number of tabs
+    int tabCount = 0;
+    int i;
+    for(i = 0; i < line->size; i++) {
+        if(line->buf[i] == '\t') tabCount++;
+    }
+
+    // Set display line
+    line->dsize = line->size + (TAB_WIDTH - 1) * tabCount;
+    line->dbuf = malloc(line->dsize + 1);
+    int dindex = 0;
+    int j;
+    for(i = 0; i < line->size; i++) {
+        if(line->buf[i] == '\t') {
+            for(j = 0; j < TAB_WIDTH; j++) {
+                line->dbuf[dindex] = ' ';
+                dindex++;
+            }  
+        } else {
+            line->dbuf[dindex] = line->buf[i];
+            dindex++;
+
+        }
+    }
+    
+    line->dbuf[dindex] = '\0';
+}
+
 /* Appends a line to *lines in state. */
 void appendLine(char *line, size_t len, Data *data) {
     // Update amount of space allocated to the lines array.
@@ -107,6 +142,9 @@ void appendLine(char *line, size_t len, Data *data) {
     data->lines[data->numLines].buf = malloc(len + 1);
     memcpy(data->lines[data->numLines].buf, line, len);
     data->lines[data->numLines].buf[len] = '\0';
+
+    createDisplayLine(&data->lines[data->numLines]);
+
     data->numLines++;
 }
 
