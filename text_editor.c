@@ -112,9 +112,9 @@ void readFile(FILE *fd, Data *data) {
 
 /* Scroll the screen if the cursor goes offscreen. */
 void scrollScreen(Cursor *cursor, int *topLine) {
-    if(cursor->y < (*topLine)) (*topLine) = cursor->y;
+    if(cursor->y < (*topLine)) (*topLine)--;
     // - 2 to account for bottom bar
-    if(cursor->y >= (*topLine) + LINES - 2) (*topLine) = cursor->y - LINES - 1;
+    if(cursor->y >= (*topLine) + LINES - 2) (*topLine)++;
 }
 
 /* DISPLAY */
@@ -138,11 +138,11 @@ void displayLines(Data *data, int topLine, int leftWidth) {
             /* Prints line number followed by the line data, which will wrap to the next line until all has been printed. */
             while(charsPrinted <= data->lines[i].size) {
                 attron(A_REVERSE);
-                mvaddnstr(screenUsed, 0, pad, sizeof(pad) - 2);
+                mvaddnstr(screenUsed, 0, pad, leftWidth);
                 attroff(A_REVERSE);
-                n = COLS - sizeof(pad) - 2;
+                n = COLS - leftWidth - 1;
                 if(data->lines[i].size != 0){
-                    mvaddnstr(screenUsed, sizeof(pad) - 1, &(data->lines[i].buf[charsPrinted]), n);
+                    mvaddnstr(screenUsed, leftWidth + 1, &(data->lines[i].buf[charsPrinted]), n);
                 }
                 charsPrinted += n;
                 screenUsed++;
@@ -157,13 +157,18 @@ void displayLines(Data *data, int topLine, int leftWidth) {
 
 /* Display a bottom bar with the file name and cursor position. */
 void displayBar(Cursor *cursor, char *fileName) {
+    // Draw horizontal line
     int i;
     for(i = 0; i < COLS; i++)
         mvaddch(LINES - 2, i, ACS_HLINE);
     
     
+
+    // Print file name
     mvaddstr(LINES - 1, 10, fileName);
     
+
+    // Print cursor position
     int n = COLS - 25;
     mvaddch(LINES - 1, n, '(');
     char str[10];
@@ -178,11 +183,11 @@ void displayBar(Cursor *cursor, char *fileName) {
 
 /* Move the cursor to its correct position on the screen. */
 void displayCursor(Data *data, Cursor *cursor, int leftWidth, int topLine) {
-    int lineWidth = COLS - leftWidth;
+    int lineWidth = COLS - leftWidth - 1;
     /* The number of spaces taken up by line numbers + cursor coords. */
-    int x = cursor->x % lineWidth + leftWidth;
+    int x = cursor->x % lineWidth + leftWidth + 1;
     /* The screen row the cursor should appear on. */
-    int y = 0;
+    int y = cursor->x / lineWidth;
     int i;
     /* Sums the lines of height each text line takes up.*/
     for(i = topLine; i < cursor->y; i++) {
@@ -193,6 +198,7 @@ void displayCursor(Data *data, Cursor *cursor, int leftWidth, int topLine) {
 
 /* Display the current file based on the State struct. */
 void display(struct State *S) {
+    erase();
     S->leftWidth = digitCount(S->data.numLines) + 1;
     displayLines(&S->data, S->topLine, S->leftWidth);
     displayBar(&S->cursor, S->fileName);
@@ -206,15 +212,33 @@ int processKeypress(struct State *S, int c) {
     switch(c) {
         case KEY_LEFT:
             if(S->cursor.x > 0) S->cursor.x--;
+            else {
+                // Wrap to end of previous line.
+                S->cursor.y--;
+                S->cursor.x = S->data.lines[S->cursor.y].size;
+            }
             break;
         case KEY_RIGHT:
             if(S->cursor.x < S->data.lines[S->cursor.y].size) S->cursor.x++;
+            else {
+                // Wrap to start of next line.
+                S->cursor.y++;
+                S->cursor.x = 0;
+            }
             break;
         case KEY_UP:
-            if(S->cursor.y > 0) S->cursor.y--;
+            if(S->cursor.y > 0) {
+                S->cursor.y--;
+                // Realign cursor if beyond bounds
+                if(S->cursor.x >= S->data.lines[S->cursor.y].size) S->cursor.x = S->data.lines[S->cursor.y].size;
+            }
             break;
         case KEY_DOWN:
-            if(S->cursor.y < S->data.numLines) S->cursor.y++;
+            if(S->cursor.y < S->data.numLines) {
+                S->cursor.y++;
+                // Realign cursor if beyond bounds
+                if(S->cursor.x >= S->data.lines[S->cursor.y].size) S->cursor.x = S->data.lines[S->cursor.y].size;
+            }
             break;
         case CTRL_KEY('q'):
         /* Exit program. */
@@ -238,7 +262,8 @@ int main(int argc, char **argv) {
     struct State S;
 
     initState(&S);
-    FILE *fd = fopen(argv[argc - 1], "r");
+    S.fileName = argv[argc - 1];
+    FILE *fd = fopen(S.fileName, "r");
     readFile(fd, &S.data);
 
     while(1) {
