@@ -298,9 +298,32 @@ void moveCursor(struct State *S, int c) {
     }
 }
 
+/* Process Page Up and Page Down keys. */
+void movePage(struct State *S, int c) {
+    int lastPage;
+    int i;
+    switch(c) {
+        case KEY_PPAGE:
+        /* Page Up */
+            for(i = 0; i < LINES - 3; i++) {
+                moveCursor(S, KEY_UP);
+                if(S->topLine > 0) S->topLine--;
+            }
+            break;
+        case KEY_NPAGE:
+        /* Page Down */
+            if(S->data.numLines - S->topLine < LINES - 2 ) lastPage = 1;
+            else lastPage = 0;
+            for(i = 0; i < LINES - 3; i++) {
+                moveCursor(S, KEY_DOWN);
+                if(S->topLine < S->data.numLines && !lastPage) S->topLine++;
+            }
+            break;
+    }
+}
+
 /* Gets the keypress and processes it. */
 int processKeypress(struct State *S, int c) {
-    int i;
     switch(c) {
         case KEY_LEFT:
         case KEY_RIGHT:
@@ -309,14 +332,8 @@ int processKeypress(struct State *S, int c) {
             moveCursor(S, c);
             break;
         case KEY_PPAGE:
-        /* Page Up */
-            //TODO
-            //for(i = 0; i < LINES - 2; i++) moveCursor(S, KEY_UP);
-            break;
         case KEY_NPAGE:
-        /* Page Down */
-            //TODO
-            //for(i = 0; i < LINES - 2; i++) moveCursor(S, KEY_DOWN);
+            movePage(S, c);
             break;
         case CTRL_KEY('q'):
         /* Exit program. */
