@@ -8,7 +8,7 @@
 #include <ncurses.h>
 
 #define CTRL_KEY(x) ((x) & 0x1f)
-#define TAB_WIDTH 4
+#define TAB_WIDTH 8
 
 typedef struct {
     int size;
@@ -45,7 +45,7 @@ void freeData(Data *data) {
     int i;
     for(i = 0; i < data->numLines; i++) {
         free(data->lines[i].buf);
-        free(fata->lines[i].dbuf);
+        free(data->lines[i].dbuf);
     }
     free(data->lines);
 }
@@ -186,13 +186,13 @@ void displayLines(Data *data, int topLine, int leftWidth) {
             strncpy(pad, num, digitCount(i));
 
             /* Prints line number followed by the line data, which will wrap to the next line until all has been printed. */
-            while(charsPrinted <= data->lines[i].size) {
+            while(charsPrinted <= data->lines[i].dsize) {
                 attron(A_REVERSE);
                 mvaddnstr(screenUsed, 0, pad, leftWidth);
                 attroff(A_REVERSE);
                 n = COLS - leftWidth - 1;
                 if(data->lines[i].size != 0){
-                    mvaddnstr(screenUsed, leftWidth + 1, &(data->lines[i].buf[charsPrinted]), n);
+                    mvaddnstr(screenUsed, leftWidth + 1, &(data->lines[i].dbuf[charsPrinted]), n);
                 }
                 charsPrinted += n;
                 screenUsed++;
@@ -235,13 +235,18 @@ void displayBar(Cursor *cursor, char *fileName) {
 void displayCursor(Data *data, Cursor *cursor, int leftWidth, int topLine) {
     int lineWidth = COLS - leftWidth - 1;
     /* The number of spaces taken up by line numbers + cursor coords. */
-    int x = cursor->x % lineWidth + leftWidth + 1;
-    /* The screen row the cursor should appear on. */
-    int y = cursor->x / lineWidth;
     int i;
+    int dx = 0;
+    for(i = 0; i < cursor->x; i++) {
+        if(data->lines[cursor->y].buf[i] == '\t') dx += TAB_WIDTH;
+        else dx++;
+    }
+    int x = dx % lineWidth + leftWidth + 1;
+    /* The screen row the cursor should appear on. */
+    int y = dx / lineWidth;
     /* Sums the lines of height each text line takes up.*/
     for(i = topLine; i < cursor->y; i++) {
-        y += 1 + data->lines[i].size / lineWidth;
+        y += 1 + data->lines[i].dsize / lineWidth;
     }
     move(y, x);
 }
@@ -257,8 +262,8 @@ void display(struct State *S) {
 
 /* KEY PROCESSOR */
 
-/* Gets the keypress and processes it. */
-int processKeypress(struct State *S, int c) {
+/* Move the cursor based on input. */
+void moveCursor(struct State *S, int c) {
     switch(c) {
         case KEY_LEFT:
             if(S->cursor.x > 0) S->cursor.x--;
@@ -289,6 +294,29 @@ int processKeypress(struct State *S, int c) {
                 // Realign cursor if beyond bounds
                 if(S->cursor.x >= S->data.lines[S->cursor.y].size) S->cursor.x = S->data.lines[S->cursor.y].size;
             }
+            break;
+    }
+}
+
+/* Gets the keypress and processes it. */
+int processKeypress(struct State *S, int c) {
+    int i;
+    switch(c) {
+        case KEY_LEFT:
+        case KEY_RIGHT:
+        case KEY_UP:
+        case KEY_DOWN:
+            moveCursor(S, c);
+            break;
+        case KEY_PPAGE:
+        /* Page Up */
+            //TODO
+            //for(i = 0; i < LINES - 2; i++) moveCursor(S, KEY_UP);
+            break;
+        case KEY_NPAGE:
+        /* Page Down */
+            //TODO
+            //for(i = 0; i < LINES - 2; i++) moveCursor(S, KEY_DOWN);
             break;
         case CTRL_KEY('q'):
         /* Exit program. */
