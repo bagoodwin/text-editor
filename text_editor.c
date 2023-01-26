@@ -169,6 +169,17 @@ void scrollScreen(Cursor *cursor, int *topLine) {
 
 /* DISPLAY */
 
+/* Calculate x position in line accounting for tabs. */
+int xPos(Data *data, Cursor *cursor) {
+    int i;
+    int dx = 0;
+    for(i = 0; i < cursor->x; i++) {
+        if(data->lines[cursor->y].buf[i] == '\t') dx += TAB_WIDTH;
+        else dx++;
+    }
+    return dx;
+}
+
 /* Display the appropriate lines on the screen. */
 void displayLines(Data *data, int topLine, int leftWidth) {
     int i;
@@ -206,17 +217,18 @@ void displayLines(Data *data, int topLine, int leftWidth) {
 }
 
 /* Display a bottom bar with the file name and cursor position. */
-void displayBar(Cursor *cursor, char *fileName) {
+void displayBar(Data *data, Cursor *cursor, char *fileName) {
     // Draw horizontal line
     int i;
     for(i = 0; i < COLS; i++)
         mvaddch(LINES - 2, i, ACS_HLINE);
-    
-    
 
     // Print file name
     mvaddstr(LINES - 1, 10, fileName);
     
+    // Calculate x position including tabs
+    // TODO
+    int x = xPos(data, cursor);
 
     // Print cursor position
     int n = COLS - 25;
@@ -226,8 +238,8 @@ void displayBar(Cursor *cursor, char *fileName) {
     intToStr(cursor->y, str);
     addnstr(str, digitCount(cursor->y));
     addch(',');
-    intToStr(cursor->x, str);
-    addnstr(str, digitCount(cursor->x));
+    intToStr(x, str);
+    addnstr(str, digitCount(x));
     addch(')');
 }
 
@@ -236,11 +248,8 @@ void displayCursor(Data *data, Cursor *cursor, int leftWidth, int topLine) {
     int lineWidth = COLS - leftWidth - 1;
     /* The number of spaces taken up by line numbers + cursor coords. */
     int i;
-    int dx = 0;
-    for(i = 0; i < cursor->x; i++) {
-        if(data->lines[cursor->y].buf[i] == '\t') dx += TAB_WIDTH;
-        else dx++;
-    }
+    int dx = xPos(data, cursor);
+
     int x = dx % lineWidth + leftWidth + 1;
     /* The screen row the cursor should appear on. */
     int y = dx / lineWidth;
@@ -256,7 +265,7 @@ void display(struct State *S) {
     erase();
     S->leftWidth = digitCount(S->data.numLines) + 1;
     displayLines(&S->data, S->topLine, S->leftWidth);
-    displayBar(&S->cursor, S->fileName);
+    displayBar(&S->data, &S->cursor, S->fileName);
     displayCursor(&S->data, &S->cursor, S->leftWidth, S->topLine);
 }
 
@@ -334,6 +343,12 @@ int processKeypress(struct State *S, int c) {
         case KEY_PPAGE:
         case KEY_NPAGE:
             movePage(S, c);
+            break;
+        case KEY_HOME:
+            S->cursor.x = 0;
+            break;
+        case KEY_END:
+            S->cursor.x = S->data.lines[S->cursor.y].size;
             break;
         case CTRL_KEY('q'):
         /* Exit program. */
