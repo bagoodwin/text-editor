@@ -6,6 +6,7 @@
 #include <sys/types.h>
 #include <setjmp.h>
 #include <ncurses.h>
+#include <malloc.h>
 
 #define CTRL_KEY(x) ((x) & 0x1f)
 #define TAB_WIDTH 8
@@ -333,10 +334,69 @@ void movePage(struct State *S, int c) {
             break;
     }
 }
+/* Join line y + 1 to the end of line y. */
+void joinLines(Data *data, int y) {
+    // Resize y's buf to it's size + the size of the line below it.
+    data->lines[y].buf = realloc(data->lines[y].buf, data->lines[y].size + data->lines[y + 1].size + 1);
+    // Copy y + 1 to the end of y
+    memcpy(&data->lines[y].buf[data->lines[y].size], data->lines[y + 1].buf, data->lines[y + 1].size);
+    data->lines[y].size += data->lines[y + 1].size;
+    data->lines[y].buf[data->lines[y].size] = '\0';
+}
+
+/* Removes the yth line from data and discards it. */
+void removeLine(Data *data, int y) {
+    free(data->lines[y].buf);
+    free(data->lines[y].dbuf);
+    // Shift lines back to overwrite the freed line
+    if(y < data->numLines)
+        memmove(&data->lines[y], &data->lines[y + 1], sizeof(TextLine) * (data->numLines - y - 1));
+    data->numLines--;
+    // Resize lines to account for one fewer line
+    data->lines = realloc(data->lines, sizeof(TextLine) * (data->numLines + 1));
+}
+
+/* Delete the character at the cursor position. */
+void deleteChar(Data *data, Cursor *cursor, int y, int x) {
+    if(cursor->x == 0 || cursor->y == 0) {
+        /* Backspace at 0,0 */
+        cursor->x++;
+        return;
+    }
+    if(y == data->numLines) {
+        /* Cursor is on the final line */
+        if(x == -1) {
+            cursor->x = data->lines[y - 1].size + 1;
+            cursor->y = y - 1;
+        }
+        return;
+    }
+    if(x == -1 && y > 0) {
+        /* Backspace at beginning of line */
+        cursor->x = data->lines[y - 1].size + 1;
+        cursor->y = y - 1;
+        joinLines(data, y - 1);
+        removeLine(data, y);
+        createDisplayLine(&data->lines[y - 1]);
+        return;
+    }
+    if(x == data->lines[y].size) {
+        /* Delete at EOL */
+        joinLines(data, y);
+        removeLine(data, y + 1);
+        createDisplayLine(&data->lines[y]);
+        return;
+    }
+
+    /* Delete in line */
+    memmove(&data->lines[y].buf[x], &data->lines[y].buf[x + 1], data->lines[y].size - x);
+    data->lines[y].size--;
+
+    createDisplayLine(&data->lines[y]);
+}
 
 /* Insert a character at the cursor position. */
 void insertChar(TextLine *line, int x, int c) {
-    FILE *fe = fopen("error.txt", "w");
     // Update line
     line->buf = realloc(line->buf, line->size + 2);
     // Moves the section of the line after x forwards one space
@@ -350,6 +410,7 @@ void insertChar(TextLine *line, int x, int c) {
 /* Gets the keypress and processes it. */
 int processKeypress(struct State *S, int c) {
     switch(c) {
+        /* MOVEMENT */
         case KEY_LEFT:
         case KEY_RIGHT:
         case KEY_UP:
@@ -369,6 +430,15 @@ int processKeypress(struct State *S, int c) {
         case CTRL_KEY('q'):
         /* Exit program. */
             normalExit(&S->data, S->fd);
+            break;
+        /* EDITING */
+        case KEY_DC:
+        /* Delete character. */
+            deleteChar(&S->data, &S->cursor, S->cursor.y, S->cursor.x);
+            break;
+        case KEY_BACKSPACE:
+            deleteChar(&S->data, &S->cursor, S->cursor.y, S->cursor.x - 1);
+            S->cursor.x--;
             break;
         default:
             insertChar(&S->data.lines[S->cursor.y], S->cursor.x, c);
