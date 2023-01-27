@@ -6,7 +6,6 @@
 #include <sys/types.h>
 #include <setjmp.h>
 #include <ncurses.h>
-#include <malloc.h>
 
 #define CTRL_KEY(x) ((x) & 0x1f)
 #define TAB_WIDTH 8
@@ -134,20 +133,21 @@ void createDisplayLine(TextLine *line) {
     line->dbuf[dindex] = '\0';
 }
 
-/* Appends a line to *lines in state. */
-void appendLine(char *line, size_t len, Data *data) {
+/* Insert a line in *lines at y. */
+void insertLine(char *line, size_t len, Data *data, int y) {
     // Update amount of space allocated to the lines array.
     data->lines = realloc(data->lines, sizeof(TextLine) * (data->numLines + 1));
+    memmove(&data->lines[y + 1], &data->lines[y], sizeof(TextLine) * (data->numLines - y));
 
-    // Add line to last position in lines array
-    data->lines[data->numLines].size = len;
-    data->lines[data->numLines].buf = malloc(len + 1);
-    memcpy(data->lines[data->numLines].buf, line, len);
-    data->lines[data->numLines].buf[len] = '\0';
+    // Add line to position y in lines array
+    data->lines[y].size = len;
+    data->lines[y].buf = malloc(len + 1);
+    memcpy(data->lines[y].buf, line, len);
+    data->lines[y].buf[len] = '\0';
 
     // Make sure there is something to be freed.
-    data->lines[data->numLines].dbuf = NULL;
-    createDisplayLine(&data->lines[data->numLines]);
+    data->lines[y].dbuf = NULL;
+    createDisplayLine(&data->lines[y]);
 
     data->numLines++;
 }
@@ -160,7 +160,7 @@ void readFile(FILE *fd, Data *data) {
 
     while((read = getline(&line, &len, fd)) != -1) {
         while(read > 0 && (line[read - 1] == '\n' || line[read - 1] == '\r')) read--;
-        appendLine(line, read, data);
+        insertLine(line, read, data, data->numLines);
     }
 }
 
@@ -358,7 +358,7 @@ void removeLine(Data *data, int y) {
 
 /* Delete the character at the cursor position. */
 void deleteChar(Data *data, Cursor *cursor, int y, int x) {
-    if(cursor->x == 0 || cursor->y == 0) {
+    if(cursor->x == 0 && cursor->y == 0) {
         /* Backspace at 0,0 */
         cursor->x++;
         return;
@@ -393,6 +393,24 @@ void deleteChar(Data *data, Cursor *cursor, int y, int x) {
     data->lines[y].size--;
 
     createDisplayLine(&data->lines[y]);
+}
+
+/* Enter creates a new line with the string to the right of the cursor */
+void enter(Data *data, Cursor *cursor) {
+    if(cursor->x == 0) {
+        /* Handles case at EOF */
+        insertLine("", 0, data, cursor->y);
+        cursor->y++;
+        return;
+    }
+    TextLine *line = &data->lines[cursor->y];
+    insertLine(&line->buf[cursor->x], line->size - cursor->x, data, cursor->y + 1);
+    line->size = cursor->x;
+    line->buf[cursor->x] = '\0';
+    line->buf = realloc(line->buf, line->size + 1);
+    createDisplayLine(line);
+    cursor->y++;
+    cursor->x = 0;
 }
 
 /* Insert a character at the cursor position. */
@@ -440,7 +458,12 @@ int processKeypress(struct State *S, int c) {
             deleteChar(&S->data, &S->cursor, S->cursor.y, S->cursor.x - 1);
             S->cursor.x--;
             break;
+        case 10:
+        case KEY_ENTER:
+            enter(&S->data, &S->cursor);
+            break;
         default:
+            if(S->cursor.y == S->data.numLines) insertLine("", 0, &S->data, S->data.numLines);
             insertChar(&S->data.lines[S->cursor.y], S->cursor.x, c);
             S->cursor.x++;
             break;  
