@@ -112,6 +112,7 @@ void createDisplayLine(TextLine *line) {
     }
 
     // Set display line
+    free(line->dbuf);
     line->dsize = line->size + (TAB_WIDTH - 1) * tabCount;
     line->dbuf = malloc(line->dsize + 1);
     int dindex = 0;
@@ -143,6 +144,8 @@ void appendLine(char *line, size_t len, Data *data) {
     memcpy(data->lines[data->numLines].buf, line, len);
     data->lines[data->numLines].buf[len] = '\0';
 
+    // Make sure there is something to be freed.
+    data->lines[data->numLines].dbuf = NULL;
     createDisplayLine(&data->lines[data->numLines]);
 
     data->numLines++;
@@ -331,6 +334,19 @@ void movePage(struct State *S, int c) {
     }
 }
 
+/* Insert a character at the cursor position. */
+void insertChar(TextLine *line, int x, int c) {
+    FILE *fe = fopen("error.txt", "w");
+    // Update line
+    line->buf = realloc(line->buf, line->size + 2);
+    // Moves the section of the line after x forwards one space
+    memmove(&line->buf[x + 1], &line->buf[x], line->size - x + 1);  
+    line->buf[x] = c;
+    line->size++;
+    
+    createDisplayLine(line);
+}
+
 /* Gets the keypress and processes it. */
 int processKeypress(struct State *S, int c) {
     switch(c) {
@@ -355,7 +371,8 @@ int processKeypress(struct State *S, int c) {
             normalExit(&S->data, S->fd);
             break;
         default:
-            addch(c);
+            insertChar(&S->data.lines[S->cursor.y], S->cursor.x, c);
+            S->cursor.x++;
             break;  
     }
 
