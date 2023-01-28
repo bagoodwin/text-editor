@@ -167,8 +167,7 @@ void saveChanges(Data *data, Cursor *cursor, char *name) {
     if(promptSave(cursor)) {
         promptFileName(name);
         // write data to file name
-        int size;
-        
+        int size;   
         char * buf = dataToBuf(data, &size);
         FILE *fd = fopen(name, "w");
         fwrite(buf, size, 1, fd);
