@@ -59,9 +59,128 @@ void errorExit(Data *data, FILE *fd, char *str) {
     exit(EXIT_FAILURE);
 }
 
+/* Prompt the user whether they want to save changes or not. */
+int promptSave() {
+    int i;
+    char * str = "Save modified buffers?(y or n) ";
+    int size = 31;
+    attron(A_REVERSE);
+    for(i = 0; i < COLS; i++)
+        if(i < size) mvaddch(LINES - 2, i, str[i]);
+        else mvaddch(LINES - 2, i, ' ');
+    attroff(A_REVERSE);
+
+    move(LINES - 2, size);
+
+    int c;
+    while(1) {
+        c = getch();
+        if(c == 'y' || c == 'Y') return 1;
+        if(c == 'n' || c == 'N') return 0;
+    }
+}
+
+/* Output key processor. */
+void outputPromptKeyProcessor(int size) {
+    int c;
+    int x;
+    int y;
+    while(1){
+        refresh();
+        c = getch();
+        /* Very simple user input handler. Only allows adding characters at the end and backspacing. */
+        getyx(stdscr, y, x);
+        switch(c) {
+            case 10:
+                return;
+                break;
+            case KEY_BACKSPACE:
+                if(x > size) { 
+                    //mvdelch(y, x - 1);
+                    mvaddch(y, x - 1, ' ');
+                    move(y, x - 1);
+                }
+                break;
+            default:
+                if(x < COLS) addch(c);
+        }
+    }
+}
+
+/* Prompt the user for the correct file to save changes to. */
+void promptFileName(char * name) {
+    int i;
+    char * str = "Output file: ";
+    int size = 13;
+    attron(A_REVERSE);
+    for(i = 0; i < COLS; i++)
+        if(i < size) mvaddch(LINES - 2, i, str[i]);
+        else mvaddch(LINES - 2, i, ' ');
+    mvaddstr(LINES - 2, size, name);
+
+    outputPromptKeyProcessor(size);
+
+    int c;
+    int x;
+    int y;
+
+    attroff(A_REVERSE);
+
+    // read line
+    y = LINES - 2;
+    x = size;
+    i = 0;
+    do {
+        c = (mvinch(y, x) & A_CHARTEXT);
+        name[i] = c;
+        x++;
+        i++;
+    } while(c != ' ' && x < COLS - 1);
+    name[i - 1] = '\0';
+}
+
+/* Convert lines of data into a single char array. */
+char * dataToBuf(Data *data, int * finalSize) {
+    int size = 0;
+    int i;
+    for(i = 0; i < data->numLines; i++) {
+        size += data->lines[i].size;
+    }
+
+    *(finalSize) = size;
+
+    char *buf = malloc(size);
+    char *loc = buf;
+    for(i = 0; i < data->numLines; i++) {
+        memcpy(loc, data->lines[i].buf, data->lines[i].size);
+        loc += data->lines[i].size;
+        *(loc) = '\n';
+        loc++;
+    }
+
+    return buf;   
+
+}
+
+/* Save changes to file. */
+void saveChanges(Data *data, Cursor *cursor, char *name) {
+    if(promptSave(cursor)) {
+        promptFileName(name);
+        // write data to file name
+        int size;
+        
+        char * buf = dataToBuf(data, &size);
+        FILE *fd = fopen(name, "w");
+        fwrite(buf, size, 1, fd);
+        fclose(fd);
+        free(buf);
+    }
+}
+
 /* Exit normally. */
-void normalExit(Data *data, FILE *fd) {
+void normalExit(Data *data, Cursor *cursor, FILE *fd, char *name) {
     fclose(fd);
+    saveChanges(data, cursor, name);
     endwin();
     freeData(data);
     exit(EXIT_SUCCESS);    
@@ -100,6 +219,7 @@ void initState(struct State *S) {
     S->cursor.y = 0;
     S->data.numLines = 0;
     S->topLine = 0;
+    S->fileName = malloc(COLS);
 }
 
 /* Creates a display line from its corresponding logical line. */
@@ -447,7 +567,7 @@ int processKeypress(struct State *S, int c) {
             break;
         case CTRL_KEY('q'):
         /* Exit program. */
-            normalExit(&S->data, S->fd);
+            normalExit(&S->data, &S->cursor, S->fd, S->fileName);
             break;
         /* EDITING */
         case KEY_DC:
