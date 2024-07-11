@@ -1,2 +1,0 @@
-This file has one very long line! It is meant to test our editors ability to break and display a long line so that all of it is visible and the line numbers are correctly aligned. Another solution may have been to implement horizontal scrolling, but I prefer to have all of the text visible without the need for horizontal scrolling. Let's make this line even longer to ensure that text will wrap more than once. It's possible that there's some bug which would cause problems at two wraps, but not at one.
-Here's a short line.

@@ -163,8 +163,8 @@ char * dataToBuf(Data *data, int * finalSize) {
 }
 
 /* Save changes to file. */
-void saveChanges(Data *data, Cursor *cursor, char *name) {
-    if(promptSave(cursor)) {
+void saveChanges(Data *data, char *name) {
+    if(promptSave()) {
         promptFileName(name);
         // write data to file name
         int size;   
@@ -172,14 +172,14 @@ void saveChanges(Data *data, Cursor *cursor, char *name) {
         FILE *fd = fopen(name, "w");
         fwrite(buf, size, 1, fd);
         fclose(fd);
-        free(buf);
+        //free(buf);
     }
 }
 
 /* Exit normally. */
-void normalExit(Data *data, Cursor *cursor, FILE *fd, char *name) {
+void normalExit(Data *data, FILE *fd, char *name) {
     fclose(fd);
-    saveChanges(data, cursor, name);
+    saveChanges(data, name);
     endwin();
     freeData(data);
     exit(EXIT_SUCCESS);    
@@ -219,6 +219,15 @@ void initState(struct State *S) {
     S->data.numLines = 0;
     S->topLine = 0;
     S->fileName = malloc(COLS);
+}
+
+/* Set file name to either the argument, or a placeholder if no argument was given. */
+void setFileName(struct State *S, int argc, char **argv) {
+    if(argc > 1) {
+        S->fileName = argv[1];
+    } else {
+        S->fileName = "placeholder.txt";
+    }
 }
 
 /* Creates a display line from its corresponding logical line. */
@@ -348,9 +357,7 @@ void displayBar(Data *data, Cursor *cursor, char *fileName) {
 
     // Print file name
     mvaddstr(LINES - 1, 10, fileName);
-    
-    // Calculate x position including tabs
-    // TODO
+
     int x = xPos(data, cursor);
 
     // Print cursor position
@@ -407,7 +414,7 @@ void moveCursor(struct State *S, int c) {
             break;
         case KEY_RIGHT:
             if(S->cursor.x < S->data.lines[S->cursor.y].size) S->cursor.x++;
-            else if(S->cursor.y < S->data.numLines) {
+            else if(S->cursor.y < S->data.numLines - 1) {
                 // Wrap to start of next line.
                 S->cursor.y++;
                 S->cursor.x = 0;
@@ -421,7 +428,7 @@ void moveCursor(struct State *S, int c) {
             }
             break;
         case KEY_DOWN:
-            if(S->cursor.y < S->data.numLines) {
+            if(S->cursor.y < S->data.numLines - 1) {
                 S->cursor.y++;
                 // Realign cursor if beyond bounds
                 if(S->cursor.x >= S->data.lines[S->cursor.y].size) S->cursor.x = S->data.lines[S->cursor.y].size;
@@ -477,17 +484,13 @@ void removeLine(Data *data, int y) {
 
 /* Delete the character at the cursor position. */
 void deleteChar(Data *data, Cursor *cursor, int y, int x) {
-    if(cursor->x == 0 && cursor->y == 0) {
+    if(x == -1 && y == 0) {
         /* Backspace at 0,0 */
         cursor->x++;
         return;
     }
-    if(y == data->numLines) {
-        /* Cursor is on the final line */
-        if(x == -1) {
-            cursor->x = data->lines[y - 1].size + 1;
-            cursor->y = y - 1;
-        }
+    if(y == data->numLines - 1 && x == data->lines[y].size) {
+        /* Cursor is at end of final line */
         return;
     }
     if(x == -1 && y > 0) {
@@ -566,7 +569,7 @@ int processKeypress(struct State *S, int c) {
             break;
         case CTRL_KEY('q'):
         /* Exit program. */
-            normalExit(&S->data, &S->cursor, S->fd, S->fileName);
+            normalExit(&S->data, S->fd, S->fileName);
             break;
         /* EDITING */
         case KEY_DC:
@@ -601,8 +604,8 @@ int main(int argc, char **argv) {
     struct State S;
 
     initState(&S);
-    S.fileName = argv[argc - 1];
-    S.fd = fopen(S.fileName, "r");
+    setFileName(&S, argc, argv);
+    S.fd = fopen(S.fileName, "rw");
     readFile(S.fd, &S.data);
 
     while(1) {
